@@ -151,9 +151,6 @@ static pkttransfer_config_t config = {
     .buf_rx_p = rx_buf,
 };
 
-// Driver internal data
-static pkttransfer_state_t pkttransfer_state_out;
-
 //-----------------------------------------------------------------------------
 // Hardware emulation
 //-----------------------------------------------------------------------------
@@ -308,31 +305,26 @@ static void pkttransfer_test_init(void)
     pkttransfer_init(pkttransfer_test_inst_p, &hw_itf, &app_itf, &config);
     assert(pkttransfer_is_init(pkttransfer_test_inst_p) == true);
 
-    // Get instance state with NULL
-    pkttransfer_get_state(pkttransfer_test_inst_p, NULL);
-
     // Get instance data
-    pkttransfer_get_state(pkttransfer_test_inst_p, &pkttransfer_state_out);
-    assert(pkttransfer_state_out.tx_state == PKTTRANSFER_STATE_DELIMITER);
-    assert(pkttransfer_state_out.tx_size == 0);
-    assert(pkttransfer_state_out.sent_size == 0);
-    assert(pkttransfer_state_out.rx_state == PKTTRANSFER_STATE_DELIMITER);
-    assert(pkttransfer_state_out.rx_size == 0);
-    assert(pkttransfer_state_out.sof_detections_cnt == 0);
-    assert(pkttransfer_state_out.received_packets_cnt == 0);
-    assert(pkttransfer_state_out.sent_packets_cnt == 0);
+    assert(pkttransfer_test_inst_p->state.tx_state == PKTTRANSFER_STATE_DELIMITER);
+    assert(pkttransfer_test_inst_p->state.tx_size == 0);
+    assert(pkttransfer_test_inst_p->state.sent_size == 0);
+    assert(pkttransfer_test_inst_p->state.rx_state == PKTTRANSFER_STATE_DELIMITER);
+    assert(pkttransfer_test_inst_p->state.rx_size == 0);
+    assert(pkttransfer_test_inst_p->state.sof_detections_cnt == 0);
+    assert(pkttransfer_test_inst_p->state.received_packets_cnt == 0);
+    assert(pkttransfer_test_inst_p->state.sent_packets_cnt == 0);
 
 #if (defined(PKTTRANSFER_OVER_CAN))
 
     // Get CAN ID
-    assert(pkttransfer_state_out.can_id_rx == 0);
-    assert(pkttransfer_state_out.can_id_tx == 0);
+    assert(pkttransfer_test_inst_p->state.can_id_rx == 0);
+    assert(pkttransfer_test_inst_p->state.can_id_tx == 0);
 
     // Set CAN ID
     pkttransfer_set_can_id_rx(pkttransfer_test_inst_p, RKTTRANSFER_TEST_CAN_ID_RX);
-    pkttransfer_get_state(pkttransfer_test_inst_p, &pkttransfer_state_out);
-    assert(pkttransfer_state_out.can_id_rx == RKTTRANSFER_TEST_CAN_ID_RX);
-    assert(pkttransfer_state_out.can_id_tx == 0);
+    assert(pkttransfer_test_inst_p->state.can_id_rx == RKTTRANSFER_TEST_CAN_ID_RX);
+    assert(pkttransfer_test_inst_p->state.can_id_tx == 0);
 #endif
 
     // Reinit instance
@@ -383,10 +375,9 @@ static void pkttransfer_test_send(void)
         assert(res == PKTTRANSFER_ERR_OK);
 
         // Get state
-        pkttransfer_get_state(pkttransfer_test_inst_p, &pkttransfer_state_out);
-        assert(pkttransfer_state_out.tx_size == payload_size + PKTTRANSFER_FRAME_CRC_SIZE);
-        assert(pkttransfer_state_out.sent_size == 0);
-        assert(pkttransfer_state_out.tx_state == PKTTRANSFER_STATE_DELIMITER);
+        assert(pkttransfer_test_inst_p->state.tx_size == payload_size + PKTTRANSFER_FRAME_CRC_SIZE);
+        assert(pkttransfer_test_inst_p->state.sent_size == 0);
+        assert(pkttransfer_test_inst_p->state.tx_state == PKTTRANSFER_STATE_DELIMITER);
 
         // Process packet
         hardware_tx_buffer_idx = 0;
@@ -397,11 +388,10 @@ static void pkttransfer_test_send(void)
         assert(memcmp(hardware_tx_buffer, frame, frame_size) == 0);
 
         // Get state
-        pkttransfer_get_state(pkttransfer_test_inst_p, &pkttransfer_state_out);
-        assert(pkttransfer_state_out.sent_packets_cnt == pkt_number + 1);
-        assert(pkttransfer_state_out.tx_size == 0);
-        assert(pkttransfer_state_out.sent_size == 0);
-        assert(pkttransfer_state_out.tx_state == PKTTRANSFER_STATE_DELIMITER);
+        assert(pkttransfer_test_inst_p->state.sent_packets_cnt == pkt_number + 1);
+        assert(pkttransfer_test_inst_p->state.tx_size == 0);
+        assert(pkttransfer_test_inst_p->state.sent_size == 0);
+        assert(pkttransfer_test_inst_p->state.tx_state == PKTTRANSFER_STATE_DELIMITER);
     }
 
     // Deinit instance
@@ -433,11 +423,11 @@ static void pkttransfer_test_receive(void)
         memcpy(hardware_rx_buffer, frame, frame_size);
         hardware_rx_buffer_idx = 0;
         hardware_rx_buffer_size = frame_size;
+        app_buffer_idx = 0;
 
         // Get state
-        pkttransfer_get_state(pkttransfer_test_inst_p, &pkttransfer_state_out);
-        assert(pkttransfer_state_out.rx_size == 0);
-        assert(pkttransfer_state_out.rx_state == PKTTRANSFER_STATE_DELIMITER);
+        assert(pkttransfer_test_inst_p->state.rx_size == 0);
+        assert(pkttransfer_test_inst_p->state.rx_state == PKTTRANSFER_STATE_DELIMITER);
 
         // Process packet
         hardware_rx_buffer_idx = 0;
@@ -448,14 +438,11 @@ static void pkttransfer_test_receive(void)
         assert(memcmp(app_buffer, payload, payload_size) == 0);
 
         // Get state
-        pkttransfer_get_state(pkttransfer_test_inst_p, &pkttransfer_state_out);
-        assert(pkttransfer_state_out.received_packets_cnt == pkt_number + 1);
-        assert(pkttransfer_state_out.tx_size == 0);
-        assert(pkttransfer_state_out.rx_size == 0);
-        assert(pkttransfer_state_out.rx_state == PKTTRANSFER_STATE_DELIMITER);
+        assert(pkttransfer_test_inst_p->state.received_packets_cnt == pkt_number + 1);
+        assert(pkttransfer_test_inst_p->state.tx_size == 0);
+        assert(pkttransfer_test_inst_p->state.rx_size == 0);
+        assert(pkttransfer_test_inst_p->state.rx_state == PKTTRANSFER_STATE_DELIMITER);
     }
-
-
 
     // Deinit instance
     pkttransfer_deinit(pkttransfer_test_inst_p);

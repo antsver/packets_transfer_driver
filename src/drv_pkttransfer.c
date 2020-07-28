@@ -24,28 +24,13 @@
 //========================================== TYPEDEFS ==============================================
 //==================================================================================================
 
-//------------------------------------------------------------------------------
-// Driver instance
-//------------------------------------------------------------------------------
-typedef struct pkttransfer_instance_s {
-    pkttransfer_hw_itf_t    hw_itf;
-    pkttransfer_app_itf_t   app_itf;
-    pkttransfer_config_t    config;
-    pkttransfer_state_t     state;
-} pkttransfer_instance_t;
-
-//------------------------------------------------------------------------------
-// Sanitizing
-//------------------------------------------------------------------------------
-static_assert(sizeof(pkttransfer_instance_t) == sizeof(pkttransfer_t), "Wrong structure size");
-
 //==================================================================================================
 //================================ PRIVATE FUNCTIONS DECLARATIONS ==================================
 //==================================================================================================
-static bool pkttransfer_bytes_for_sending(pkttransfer_instance_t * pkttransfer_inst_p);
-static uint8_t pkttransfer_prepare_byte(pkttransfer_instance_t * pkttransfer_inst_p);
-static void pkttransfer_process_byte(pkttransfer_instance_t * pkttransfer_inst_p, uint8_t byte);
-static void pkttransfer_process_frame(pkttransfer_instance_t * pkttransfer_inst_p);
+static bool pkttransfer_bytes_for_sending(pkttransfer_t * pkttransfer_inst_p);
+static uint8_t pkttransfer_prepare_byte(pkttransfer_t * pkttransfer_inst_p);
+static void pkttransfer_process_byte(pkttransfer_t * pkttransfer_inst_p, uint8_t byte);
+static void pkttransfer_process_frame(pkttransfer_t * pkttransfer_inst_p);
 
 //==================================================================================================
 //==================================== PRIVATE STATIC DATA =========================================
@@ -62,7 +47,7 @@ static void pkttransfer_process_frame(pkttransfer_instance_t * pkttransfer_inst_
 //------------------------------------------------------------------------------
 // Check if there are bytes to be sent
 //------------------------------------------------------------------------------
-static bool pkttransfer_bytes_for_sending(pkttransfer_instance_t * pkttransfer_inst_p)
+static bool pkttransfer_bytes_for_sending(pkttransfer_t * pkttransfer_inst_p)
 {
     pkttransfer_state_t* state_p = &(pkttransfer_inst_p->state);
 
@@ -82,7 +67,7 @@ static bool pkttransfer_bytes_for_sending(pkttransfer_instance_t * pkttransfer_i
 //                                        0x7E is 0x7D 0x5E
 //                                        0x7D is 0x7D 0x5D
 //------------------------------------------------------------------------------
-static uint8_t pkttransfer_prepare_byte(pkttransfer_instance_t * pkttransfer_inst_p)
+static uint8_t pkttransfer_prepare_byte(pkttransfer_t * pkttransfer_inst_p)
 {
     pkttransfer_state_t* state_p = &(pkttransfer_inst_p->state);
     pkttransfer_config_t* config_p = &(pkttransfer_inst_p->config);
@@ -143,7 +128,7 @@ static uint8_t pkttransfer_prepare_byte(pkttransfer_instance_t * pkttransfer_ins
 //                                        0x7E is 0x7D 0x5E
 //                                        0x7D is 0x7D 0x5D
 //------------------------------------------------------------------------------
-static void pkttransfer_process_byte(pkttransfer_instance_t * pkttransfer_inst_p, uint8_t byte)
+static void pkttransfer_process_byte(pkttransfer_t * pkttransfer_inst_p, uint8_t byte)
 {
     pkttransfer_state_t* state_p = &(pkttransfer_inst_p->state);
     pkttransfer_config_t* config_p = &(pkttransfer_inst_p->config);
@@ -210,7 +195,7 @@ static void pkttransfer_process_byte(pkttransfer_instance_t * pkttransfer_inst_p
 //  - checks length of payload
 //  - calls callback to pass received frame to the application
 //------------------------------------------------------------------------------
-static void pkttransfer_process_frame(pkttransfer_instance_t * pkttransfer_inst_p)
+static void pkttransfer_process_frame(pkttransfer_t * pkttransfer_inst_p)
 {
     pkttransfer_config_t* config_p = &(pkttransfer_inst_p->config);
     pkttransfer_state_t* state_p = &(pkttransfer_inst_p->state);
@@ -250,13 +235,10 @@ void pkttransfer_init(pkttransfer_t* inst_p, const pkttransfer_hw_itf_t* hw_itf_
            (hw_itf_p->rx_cb != NULL)    && (hw_itf_p->rx_is_ready_cb != NULL) &&
            (hw_itf_p->tx_cb != NULL)    && (hw_itf_p->tx_is_avail_cb != NULL));
 
-    pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
-
-    memset(pkttransfer_inst_p, 0x00, sizeof(pkttransfer_instance_t));
-
-    memcpy(&(pkttransfer_inst_p->hw_itf), hw_itf_p, sizeof(pkttransfer_hw_itf_t));
-    memcpy(&(pkttransfer_inst_p->app_itf), app_itf_p, sizeof(pkttransfer_app_itf_t));
-    memcpy(&(pkttransfer_inst_p->config), config_p, sizeof(pkttransfer_config_t));
+    memset(inst_p, 0x00, sizeof(pkttransfer_t));
+    memcpy(&(inst_p->hw_itf), hw_itf_p, sizeof(pkttransfer_hw_itf_t));
+    memcpy(&(inst_p->app_itf), app_itf_p, sizeof(pkttransfer_app_itf_t));
+    memcpy(&(inst_p->config), config_p, sizeof(pkttransfer_config_t));
 }
 
 //-----------------------------------------------------------------------------
@@ -274,20 +256,7 @@ void pkttransfer_deinit(pkttransfer_t* inst_p)
 //------------------------------------------------------------------------------
 bool pkttransfer_is_init(const pkttransfer_t * inst_p)
 {
-    return ((inst_p != NULL) && (((pkttransfer_instance_t*)inst_p)->config.payload_size_max != 0));
-}
-
-//-----------------------------------------------------------------------------
-// Get driver's internal state
-//-----------------------------------------------------------------------------
-void pkttransfer_get_state(const pkttransfer_t* inst_p, pkttransfer_state_t* state_out_p)
-{
-    assert(pkttransfer_is_init(inst_p));
-    pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
-
-    if (state_out_p != NULL) {
-        memcpy(state_out_p, &(pkttransfer_inst_p->state), sizeof(pkttransfer_state_t));
-    }
+    return ((inst_p != NULL) && (inst_p->config.payload_size_max != 0));
 }
 
 //-----------------------------------------------------------------------------
@@ -301,9 +270,8 @@ pkttransfer_err_t pkttransfer_send(pkttransfer_t* inst_p, const uint8_t* payload
 {
     assert(pkttransfer_is_init(inst_p));
 
-    pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
-    pkttransfer_config_t* config_p = &(pkttransfer_inst_p->config);
-    pkttransfer_state_t* state_p = &(pkttransfer_inst_p->state);
+    pkttransfer_config_t* config_p = &(inst_p->config);
+    pkttransfer_state_t* state_p = &(inst_p->state);
 
     // If payload exceeds maximum packet lenght
     if (size > config_p->payload_size_max) {
@@ -339,9 +307,7 @@ void pkttransfer_set_can_id_rx(pkttransfer_t* inst_p, uint32_t can_id_rx)
 {
     assert(pkttransfer_is_init(inst_p));
 
-    pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
-
-    pkttransfer_inst_p->state.can_id_rx = can_id_rx;
+    inst_p->state.can_id_rx = can_id_rx;
 }
 #endif
 
@@ -352,11 +318,10 @@ void pkttransfer_task(pkttransfer_t* inst_p)
 {
     assert(pkttransfer_is_init(inst_p));
 
-    pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
-    pkttransfer_hw_itf_t * hw_itf_p = &(pkttransfer_inst_p->hw_itf);
+    pkttransfer_hw_itf_t * hw_itf_p = &(inst_p->hw_itf);
 
     // If there are bytes to be sent into the low level driver
-    if (pkttransfer_bytes_for_sending(pkttransfer_inst_p) == true) {
+    if (pkttransfer_bytes_for_sending(inst_p) == true) {
 
         // If low level driver is ready to send
         if (hw_itf_p->tx_is_avail_cb(hw_itf_p->hw_p) == true) {
@@ -364,10 +329,10 @@ void pkttransfer_task(pkttransfer_t* inst_p)
             #if (defined(PKTTRANSFER_OVER_UART))
 
                 // Prepare byte
-                uint8_t transmit_byte = pkttransfer_prepare_byte(pkttransfer_inst_p);
+                uint8_t transmit_byte = pkttransfer_prepare_byte(inst_p);
 
                 // Send byte into low level driver
-                pkttransfer_inst_p->hw_itf.tx_cb(hw_itf_p->hw_p, transmit_byte);
+                inst_p->hw_itf.tx_cb(hw_itf_p->hw_p, transmit_byte);
 
             #elif (defined(PKTTRANSFER_OVER_CAN))
 
@@ -376,15 +341,15 @@ void pkttransfer_task(pkttransfer_t* inst_p)
                 size_t transmit_buf_size = 0;
 
                 for (size_t i = 0; i < sizeof(transmit_buf); i++) {
-                    transmit_buf[i] = pkttransfer_prepare_byte(pkttransfer_inst_p);
+                    transmit_buf[i] = pkttransfer_prepare_byte(inst_p);
                     transmit_buf_size++;
-                    if(pkttransfer_bytes_for_sending(pkttransfer_inst_p) == false) {
+                    if(pkttransfer_bytes_for_sending(inst_p) == false) {
                         break;
                     }
                 }
 
                 // Send bytes into low level driver
-                pkttransfer_inst_p->hw_itf.tx_cb(hw_itf_p->hw_p, transmit_buf, transmit_buf_size, pkttransfer_inst_p->state.can_id_tx);
+                inst_p->hw_itf.tx_cb(hw_itf_p->hw_p, transmit_buf, transmit_buf_size, inst_p->state.can_id_tx);
             #endif
         }
     }
@@ -396,20 +361,20 @@ void pkttransfer_task(pkttransfer_t* inst_p)
         #if (defined(PKTTRANSFER_OVER_UART))
 
             // Receive byte from low level driver
-            uint8_t received_byte = pkttransfer_inst_p->hw_itf.rx_cb(hw_itf_p->hw_p);
+            uint8_t received_byte = inst_p->hw_itf.rx_cb(hw_itf_p->hw_p);
 
             // Process received byte, process received frame, pass payload to application
-            pkttransfer_process_byte(pkttransfer_inst_p, received_byte);
+            pkttransfer_process_byte(inst_p, received_byte);
 
         #elif (defined(PKTTRANSFER_OVER_CAN))
 
             // Receive bytes from low level driver
             uint8_t received_buf[PKTTRANSFER_CAN_MGS_SIZE];
-            size_t received_buf_size = hw_itf_p->rx_cb(hw_itf_p->hw_p, received_buf, pkttransfer_inst_p->state.can_id_rx);
+            size_t received_buf_size = hw_itf_p->rx_cb(hw_itf_p->hw_p, received_buf, inst_p->state.can_id_rx);
 
             // Process received bytes, process received frame, pass payload to application
             for (size_t i = 0; i < received_buf_size; i++) {
-                pkttransfer_process_byte(pkttransfer_inst_p, received_buf[i]);
+                pkttransfer_process_byte(inst_p, received_buf[i]);
             }
 
         #endif
@@ -422,8 +387,8 @@ void pkttransfer_task(pkttransfer_t* inst_p)
 uint16_t pkttransfer_crc16(const uint8_t* data_p, size_t size)
 {
     uint16_t poly_reversed = 0x8408; // reversed poly (LSB-first) for 0x1021
-    uint16_t crc = 0xFFFF; // init value
-    uint16_t xorout = 0xFFFF; // Xor crc before output
+    uint16_t crc = 0xFFFF;
+    uint16_t xorout = 0xFFFF;
     size_t byte_cnt = 0;
     uint8_t out[2];
 

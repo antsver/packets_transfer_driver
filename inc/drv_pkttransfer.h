@@ -57,19 +57,6 @@ extern "C" {
 //=========================================== MACROS ===============================================
 //==================================================================================================
 
-//------------------------------------------------------------------------------
-// Size of hidden structure 'pkttransfer_t'
-//------------------------------------------------------------------------------
-#if (defined(PKTTRANSFER_OVER_UART))
-
-    #define PKTTRANSFER_INSTANCE_SIZE (72)
-
-#elif (defined(PKTTRANSFER_OVER_CAN))
-
-    #define PKTTRANSFER_INSTANCE_SIZE (80)
-
-#endif
-
 //-----------------------------------------------------------------------------
 // Size of payload in CAN message
 //-----------------------------------------------------------------------------
@@ -104,13 +91,6 @@ extern "C" {
 //==================================================================================================
 
 //-----------------------------------------------------------------------------
-// Driver instance (structure is hidden in .c file)
-//-----------------------------------------------------------------------------
-typedef struct pkttransfer_s {
-    uint8_t data[PKTTRANSFER_INSTANCE_SIZE];
-} pkttransfer_t;
-
-//-----------------------------------------------------------------------------
 // Result of operation
 // Only codes from 'pkttransfer_res_enum_t' enum can be returned
 // Integer is used instead of enum in order to determine size of value
@@ -124,12 +104,6 @@ typedef enum pkttransfer_err_enum_e {
     // Block of driver's errors
     PKTTRANSFER_ERR_BASE = PKTTRANSFER_ERR_CODE_BASE,
     PKTTRANSFER_ERR_TX_OVF,     // Internal TX buffer overflow
-    PKTTRANSFER_ERR_RX_OVF,     // Internal RX buffer overflow
-    PKTTRANSFER_ERR_TX_ERR,     // Hardware TX error
-    PKTTRANSFER_ERR_RX_ERR,     // Hardware RX error
-    PKTTRANSFER_ERR_NO_CONN,    // No hardware connection
-    PKTTRANSFER_ERR_CRC,        // CRC error in the received packet
-    PKTTRANSFER_ERR_FRAME,      // Framing error in the received packet
 } pkttransfer_err_enum_t;
 
 //------------------------------------------------------------------------------
@@ -272,6 +246,16 @@ typedef struct pkttransfer_state_s {
 
 } pkttransfer_state_t;
 
+//------------------------------------------------------------------------------
+// Driver instance
+//------------------------------------------------------------------------------
+typedef struct pkttransfer_s {
+    pkttransfer_hw_itf_t    hw_itf;
+    pkttransfer_app_itf_t   app_itf;
+    pkttransfer_config_t    config;
+    pkttransfer_state_t     state;
+} pkttransfer_t;
+
 //==================================================================================================
 //================================ PUBLIC FUNCTIONS DECLARATIONS ===================================
 //==================================================================================================
@@ -301,14 +285,6 @@ void pkttransfer_deinit(pkttransfer_t* inst_p);
 // Returns - 'false' is pointer is NULL or driver is not initialized
 //------------------------------------------------------------------------------
 bool pkttransfer_is_init(const pkttransfer_t * inst_p);
-
-//-----------------------------------------------------------------------------
-// Get driver's internal state
-//
-// 'inst_p'         - pointer to initialized driver instance
-// 'state_out_p'    - pointer to output state structure (can be null)
-//-----------------------------------------------------------------------------
-void pkttransfer_get_state(const pkttransfer_t* inst_p, pkttransfer_state_t* state_out_p);
 
 //-----------------------------------------------------------------------------
 // Send packet
