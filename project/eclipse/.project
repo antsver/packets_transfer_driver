@@ -25,6 +25,11 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>example</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>inc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -33,6 +38,11 @@
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>example/example.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/example/example.c</locationURI>
 		</link>
 		<link>
 			<name>inc/drv_pkttransfer.h</name>
