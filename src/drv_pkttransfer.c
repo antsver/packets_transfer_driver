@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
-// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 //**************************************************************************************************
 // Driver for variable length packets transfer over serial interfaces
 //**************************************************************************************************
@@ -226,8 +223,8 @@ static void pkttransfer_process_frame(pkttransfer_instance_t * pkttransfer_inst_
     }
 
     // Check CRC
-    uint16_t actual_crc = (config_p->buf_rx_p[state_p->rx_size] << 8) | (config_p->buf_rx_p[state_p->rx_size-1]);
-    uint16_t expected_crc = pkttransfer_crc16(config_p->buf_rx_p, state_p->rx_size);
+    uint16_t actual_crc = (config_p->buf_rx_p[state_p->rx_size-1] << 8) | (config_p->buf_rx_p[state_p->rx_size-2]);
+    uint16_t expected_crc = pkttransfer_crc16(config_p->buf_rx_p, state_p->rx_size - PKTTRANSFER_FRAME_CRC_SIZE);
     if (actual_crc != expected_crc) {
         return;
     }
@@ -245,7 +242,7 @@ static void pkttransfer_process_frame(pkttransfer_instance_t * pkttransfer_inst_
 //-----------------------------------------------------------------------------
 // Initialize driver instance
 //-----------------------------------------------------------------------------
-void pkttransfer_init(pkttransfer_t* inst_p, const pkttransfer_hw_itf_t* hw_itf_p, const pkttransfer_config_t* config_p)
+void pkttransfer_init(pkttransfer_t* inst_p, const pkttransfer_hw_itf_t* hw_itf_p, const pkttransfer_app_itf_t* app_itf_p, const pkttransfer_config_t* config_p)
 {
     assert((inst_p != NULL) && (hw_itf_p != NULL) && (config_p != NULL));
     assert((config_p->payload_size_max != 0) &&
@@ -255,7 +252,10 @@ void pkttransfer_init(pkttransfer_t* inst_p, const pkttransfer_hw_itf_t* hw_itf_
 
     pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
 
+    memset(pkttransfer_inst_p, 0x00, sizeof(pkttransfer_instance_t));
+
     memcpy(&(pkttransfer_inst_p->hw_itf), hw_itf_p, sizeof(pkttransfer_hw_itf_t));
+    memcpy(&(pkttransfer_inst_p->app_itf), app_itf_p, sizeof(pkttransfer_app_itf_t));
     memcpy(&(pkttransfer_inst_p->config), config_p, sizeof(pkttransfer_config_t));
 }
 
@@ -278,26 +278,12 @@ bool pkttransfer_is_init(const pkttransfer_t * inst_p)
 }
 
 //-----------------------------------------------------------------------------
-// Get driver's internal data
+// Get driver's internal state
 //-----------------------------------------------------------------------------
-void pkttransfer_get_instance_data(const pkttransfer_t* inst_p,
-                                   pkttransfer_hw_itf_t* hw_itf_out_p, pkttransfer_app_itf_t* app_itf_out_p,
-                                   pkttransfer_config_t* config_out_p, pkttransfer_state_t* state_out_p)
+void pkttransfer_get_state(const pkttransfer_t* inst_p, pkttransfer_state_t* state_out_p)
 {
     assert(pkttransfer_is_init(inst_p));
     pkttransfer_instance_t * pkttransfer_inst_p = (pkttransfer_instance_t*)inst_p;
-
-    if (hw_itf_out_p != NULL) {
-        memcpy(hw_itf_out_p, &(pkttransfer_inst_p->hw_itf), sizeof(pkttransfer_hw_itf_t));
-    }
-
-    if (app_itf_out_p != NULL) {
-        memcpy(app_itf_out_p, &(pkttransfer_inst_p->app_itf), sizeof(pkttransfer_app_itf_t));
-    }
-
-    if (config_out_p != NULL) {
-        memcpy(config_out_p, &(pkttransfer_inst_p->config), sizeof(pkttransfer_config_t));
-    }
 
     if (state_out_p != NULL) {
         memcpy(state_out_p, &(pkttransfer_inst_p->state), sizeof(pkttransfer_state_t));
@@ -308,9 +294,9 @@ void pkttransfer_get_instance_data(const pkttransfer_t* inst_p,
 // Send packet
 //-----------------------------------------------------------------------------
 #if (defined(PKTTRANSFER_OVER_UART))
-pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size)
+pkttransfer_err_t pkttransfer_send(pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size)
 #elif (defined(PKTTRANSFER_OVER_CAN))
-pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size, uint32_t can_id_tx)
+pkttransfer_err_t pkttransfer_send(pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size, uint32_t can_id_tx)
 #endif
 {
     assert(pkttransfer_is_init(inst_p));
@@ -339,7 +325,7 @@ pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* p
 
     // Add CRC
     uint16_t crc = pkttransfer_crc16(config_p->buf_tx_p, size);
-    config_p->buf_tx_p[size] = (crc & 0x0F);
+    config_p->buf_tx_p[size] = (crc & 0xFF);
     config_p->buf_tx_p[size + 1] = (crc >> 8);
 
     return PKTTRANSFER_ERR_OK;
@@ -349,7 +335,7 @@ pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* p
 // Set CAN ID to filter incoming CAN messages
 //-----------------------------------------------------------------------------
 #if (defined(PKTTRANSFER_OVER_CAN))
-void pkttransfer_set_can_id_rx(const pkttransfer_t* inst_p, uint32_t can_id_rx)
+void pkttransfer_set_can_id_rx(pkttransfer_t* inst_p, uint32_t can_id_rx)
 {
     assert(pkttransfer_is_init(inst_p));
 
@@ -362,7 +348,7 @@ void pkttransfer_set_can_id_rx(const pkttransfer_t* inst_p, uint32_t can_id_rx)
 //-----------------------------------------------------------------------------
 // Driver task
 //-----------------------------------------------------------------------------
-void pkttransfer_task(const pkttransfer_t* inst_p)
+void pkttransfer_task(pkttransfer_t* inst_p)
 {
     assert(pkttransfer_is_init(inst_p));
 
@@ -370,7 +356,7 @@ void pkttransfer_task(const pkttransfer_t* inst_p)
     pkttransfer_hw_itf_t * hw_itf_p = &(pkttransfer_inst_p->hw_itf);
 
     // If there are bytes to be sent into the low level driver
-    if (pkttransfer_bytes_for_sending(pkttransfer_inst_p) != false) {
+    if (pkttransfer_bytes_for_sending(pkttransfer_inst_p) == true) {
 
         // If low level driver is ready to send
         if (hw_itf_p->tx_is_avail_cb(hw_itf_p->hw_p) == true) {

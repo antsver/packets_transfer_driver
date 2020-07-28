@@ -45,6 +45,7 @@
 #ifndef DRV_PKTTRANSFER_H
 #define DRV_PKTTRANSFER_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -144,6 +145,20 @@ typedef enum pkttransfer_frame_state_enum_e {
 } pkttransfer_frame_state_enum_t;
 
 
+//------------------------------------------------------------------------------
+// Check if it's possible to send bytes to UART/CAN (or pass them into send buffer of the UART/CAN driver)
+//
+// 'hw_p'       - pointer to hardware driver instance, passed over 'pkttransfer_hw_itf_t' structure (can be NULL)
+//------------------------------------------------------------------------------
+typedef bool (*pkttransfer_hw_tx_is_avail_cb_t)(const void * hw_p);
+
+//------------------------------------------------------------------------------
+// Check if there are received bytes from UART/CAN
+//
+// 'hw_p'       - pointer to hardware driver instance, passed over 'pkttransfer_hw_itf_t' structure (can be NULL)
+//------------------------------------------------------------------------------
+typedef bool (*pkttransfer_hw_rx_is_ready_cb_t)(const void * hw_p);
+
 #if (defined(PKTTRANSFER_OVER_UART))
 
 //------------------------------------------------------------------------------
@@ -171,7 +186,7 @@ typedef uint8_t (*pkttransfer_hw_uart_rx_cb_t)(const void * hw_p);
 // 'size'   - size of data (guaranteed - not more than PKTTRANSFER_CAN_MGS_SIZE)
 // 'can_id' - ID to be sent in the CAN message
 //------------------------------------------------------------------------------
-typedef void (*pkttransfer_hw_can_tx_cb_t)(const void * hw_p, const uint8_t* data_p, size_t size, uint32_t can_id);
+typedef void (*pkttransfer_hw_can_tx_cb_t)(const void * hw_p, const uint8_t* data_p, size_t size, uint32_t can_id_tx);
 
 //------------------------------------------------------------------------------
 // Get received bytes from CAN (or read them from receive buffer of the CAN driver)
@@ -182,23 +197,9 @@ typedef void (*pkttransfer_hw_can_tx_cb_t)(const void * hw_p, const uint8_t* dat
 //
 // Returns - number of bytes copied into output buffer (not more than PKTTRANSFER_CAN_MGS_SIZE)
 //------------------------------------------------------------------------------
-typedef size_t (*pkttransfer_hw_can_rx_cb_t)(const void * hw_p, uint8_t* data_out_p, uint32_t can_id);
+typedef size_t (*pkttransfer_hw_can_rx_cb_t)(const void * hw_p, uint8_t* data_out_p, uint32_t can_id_rx);
 
 #endif
-
-//------------------------------------------------------------------------------
-// Check if possible to send bytes to UART/CAN (or pass them into send buffer of the UART/CAN driver)
-//
-// 'hw_p'       - pointer to hardware driver instance, passed over 'pkttransfer_hw_itf_t' structure (can be NULL)
-//------------------------------------------------------------------------------
-typedef bool (*pkttransfer_hw_tx_is_avail_cb_t)(const void * hw_p);
-
-//------------------------------------------------------------------------------
-// Check if there are received bytes from UART/CAN
-//
-// 'hw_p'       - pointer to hardware driver instance, passed over 'pkttransfer_hw_itf_t' structure (can be NULL)
-//------------------------------------------------------------------------------
-typedef bool (*pkttransfer_hw_rx_is_ready_cb_t)(const void * hw_p);
 
 //------------------------------------------------------------------------------
 // Pass received packet to application
@@ -207,7 +208,7 @@ typedef bool (*pkttransfer_hw_rx_is_ready_cb_t)(const void * hw_p);
 // 'payload_p'  - pointer to received payload
 // 'size'       - size of received payload (guaranteed - 1 .. 'pkttransfer_config_t.pkt_len_max')
 //------------------------------------------------------------------------------
-typedef bool (*pkttransfer_app_pkt_cb_t)(const void * app_p, const uint8_t* payload_p, size_t size);
+typedef void (*pkttransfer_app_pkt_cb_t)(const void * app_p, const uint8_t* payload_p, size_t size);
 
 //------------------------------------------------------------------------------
 // Interface to hardware level (callbacks to hardware layer)
@@ -278,11 +279,12 @@ typedef struct pkttransfer_state_s {
 //-----------------------------------------------------------------------------
 // Initialize driver instance
 //
-// 'inst_p'   - pointer to driver instance (can be already initialized)
-// 'hw_itf_p' - pointer to hardware interface (structure will be copied into instance)
-// 'config_p' - pointer to configuration structure (structure will be copied into instance)
+// 'inst_p'     - pointer to driver instance (can be already initialized)
+// 'hw_itf_p'   - pointer to hardware interface (structure will be copied into instance)
+// 'app_itf_p'  - pointer to application interface (structure will be copied into instance)
+// 'config_p'   - pointer to configuration structure (structure will be copied into instance)
 //-----------------------------------------------------------------------------
-void pkttransfer_init(pkttransfer_t* inst_p, const pkttransfer_hw_itf_t* hw_itf_p, const pkttransfer_config_t* config_p);
+void pkttransfer_init(pkttransfer_t* inst_p, const pkttransfer_hw_itf_t* hw_itf_p, const pkttransfer_app_itf_t* app_itf_p, const pkttransfer_config_t* config_p);
 
 //-----------------------------------------------------------------------------
 // Deinitialize driver instance
@@ -301,17 +303,12 @@ void pkttransfer_deinit(pkttransfer_t* inst_p);
 bool pkttransfer_is_init(const pkttransfer_t * inst_p);
 
 //-----------------------------------------------------------------------------
-// Get driver's internal data
+// Get driver's internal state
 //
 // 'inst_p'         - pointer to initialized driver instance
-// 'hw_itf_out_p'   - pointer to output hardware interface (can be null)
-// 'app_itf_out_p'  - pointer to output application interface (can be null)
-// 'config_out_p'   - pointer to output configuration structure (can be null)
 // 'state_out_p'    - pointer to output state structure (can be null)
 //-----------------------------------------------------------------------------
-void pkttransfer_get_instance_data(const pkttransfer_t* inst_p,
-                                   pkttransfer_hw_itf_t* hw_itf_out_p, pkttransfer_app_itf_t* app_itf_out_p,
-                                   pkttransfer_config_t* config_out_p, pkttransfer_state_t* state_out_p);
+void pkttransfer_get_state(const pkttransfer_t* inst_p, pkttransfer_state_t* state_out_p);
 
 //-----------------------------------------------------------------------------
 // Send packet
@@ -326,9 +323,9 @@ void pkttransfer_get_instance_data(const pkttransfer_t* inst_p,
 // Returns - 0 if OK, error code otherwise
 //-----------------------------------------------------------------------------
 #if (defined(PKTTRANSFER_OVER_UART))
-pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size);
+pkttransfer_err_t pkttransfer_send(pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size);
 #elif (defined(PKTTRANSFER_OVER_CAN))
-pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size, uint32_t can_id_tx);
+pkttransfer_err_t pkttransfer_send(pkttransfer_t* inst_p, const uint8_t* payload_p, size_t size, uint32_t can_id_tx);
 #endif
 
 //-----------------------------------------------------------------------------
@@ -338,7 +335,7 @@ pkttransfer_err_t pkttransfer_send(const pkttransfer_t* inst_p, const uint8_t* p
 // 'can_id_tx'  - ID field for CAN messages
 //-----------------------------------------------------------------------------
 #if (defined(PKTTRANSFER_OVER_CAN))
-void pkttransfer_set_can_id_rx(const pkttransfer_t* inst_p, uint32_t can_id_rx);
+void pkttransfer_set_can_id_rx(pkttransfer_t* inst_p, uint32_t can_id_rx);
 #endif
 
 //-----------------------------------------------------------------------------
@@ -350,13 +347,14 @@ void pkttransfer_set_can_id_rx(const pkttransfer_t* inst_p, uint32_t can_id_rx);
 //
 // 'inst_p' - pointer to initialized driver instance
 //-----------------------------------------------------------------------------
-void pkttransfer_task(const pkttransfer_t* inst_p);
+void pkttransfer_task(pkttransfer_t* inst_p);
 
 //-----------------------------------------------------------------------------
 // Calculate CRC-16-CCITT (aka CRC-16-HDLC or CRC-16-X25) for entire buffer
 //
 // x^16 + x^12 + x^5 + 1
-// poly 0x1021; init 0xFFFF; xor 0xFFFF; RefIn true; RefOut true; Test 0x906E
+// poly_normal 0x1021; poly_reversed 0x8408; init 0xFFFF; xor 0xFFFF; RefIn true; RefOut true;
+// test 0x906E for "123456789" or {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39}
 //
 // 'data_p' - pointer to data buffer
 // 'size'   - size of data in buffer
@@ -372,10 +370,9 @@ uint16_t pkttransfer_crc16(const uint8_t* data_p, size_t size);
 #if (defined(PKTTRANSFER_USE_TESTS))
 //-----------------------------------------------------------------------------
 // Run all tests on the target platform
-//
-// Returns - number of failed test or 0 if all tests are successful
+// Stay in assert if test is failed
 //-----------------------------------------------------------------------------
-int32_t pkttransfer_run_tests(void);
+void pkttransfer_run_tests(void);
 #endif
 
 #ifdef __cplusplus
